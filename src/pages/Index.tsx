@@ -21,20 +21,76 @@ const Index = () => {
 
   useEffect(() => {
     getUser()
-    getPosts()
+    // Load mock data if no Supabase connection
+    if (!supabase) {
+      setMockData()
+    } else {
+      getPosts()
+    }
   }, [])
+
+  const setMockData = () => {
+    const mockPosts: Post[] = [
+      {
+        id: '1',
+        title: 'Need help moving furniture',
+        description: 'Looking for someone with a truck to help move a couch and dining table this weekend. Happy to pay for gas and time!',
+        category: 'help-needed',
+        location: 'Downtown Area',
+        created_at: new Date().toISOString(),
+        user_id: '1',
+        user_name: 'John Smith',
+        user_email: 'john@example.com',
+        is_active: true
+      },
+      {
+        id: '2',
+        title: 'Free lawn mowing service',
+        description: 'I have a new lawn mower and would love to help neighbors with their yards. No charge, just want to help the community!',
+        category: 'offering-help',
+        location: 'Maple Street',
+        created_at: new Date(Date.now() - 86400000).toISOString(),
+        user_id: '2',
+        user_name: 'Sarah Johnson',
+        user_email: 'sarah@example.com',
+        is_active: true
+      },
+      {
+        id: '3',
+        title: 'Community BBQ this Saturday',
+        description: 'Join us for our monthly neighborhood BBQ! Bring a side dish to share. Burgers and drinks provided.',
+        category: 'events',
+        location: 'Community Park',
+        created_at: new Date(Date.now() - 172800000).toISOString(),
+        user_id: '3',
+        user_name: 'Mike Wilson',
+        user_email: 'mike@example.com',
+        is_active: true
+      }
+    ]
+    setPosts(mockPosts)
+    setLoading(false)
+  }
 
   useEffect(() => {
     filterPosts()
   }, [posts, searchTerm, selectedCategory])
 
   const getUser = async () => {
+    if (!supabase) {
+      setUser(null)
+      setLoading(false)
+      return
+    }
+    
     const { data: { user } } = await supabase.auth.getUser()
     setUser(user)
     setLoading(false)
   }
 
   const getPosts = async () => {
+    if (!supabase) return
+    
     const { data, error } = await supabase
       .from('posts')
       .select('*')
@@ -77,6 +133,15 @@ const Index = () => {
     category: string
     location: string
   }) => {
+    if (!supabase) {
+      toast({
+        title: "Demo Mode",
+        description: "Connect to Supabase to enable post creation",
+        variant: "destructive"
+      })
+      return
+    }
+    
     if (!user) return
 
     const { error } = await supabase
@@ -104,6 +169,15 @@ const Index = () => {
     name: string
     location: string
   }) => {
+    if (!supabase) {
+      toast({
+        title: "Demo Mode",
+        description: "Connect to Supabase to enable authentication",
+        variant: "destructive"
+      })
+      return
+    }
+    
     const { error } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
@@ -120,6 +194,15 @@ const Index = () => {
   }
 
   const handleSignIn = async (data: { email: string; password: string }) => {
+    if (!supabase) {
+      toast({
+        title: "Demo Mode",
+        description: "Connect to Supabase to enable authentication",
+        variant: "destructive"
+      })
+      return
+    }
+    
     const { error } = await supabase.auth.signInWithPassword({
       email: data.email,
       password: data.password
@@ -130,6 +213,8 @@ const Index = () => {
   }
 
   const handleSignOut = async () => {
+    if (!supabase) return
+    
     await supabase.auth.signOut()
     setUser(null)
     toast({
