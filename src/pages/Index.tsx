@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react"
-import { supabase } from "@/integrations/supabase/client"
 import { Header } from "@/components/Header"
 import { PostCard } from "@/components/PostCard"
 import { CreatePostDialog } from "@/components/CreatePostDialog"
@@ -7,11 +6,12 @@ import { AuthDialog } from "@/components/AuthDialog"
 import { FilterBar } from "@/components/FilterBar"
 import { Post } from "@/types/database"
 import { useToast } from "@/hooks/use-toast"
+import { useLocalStorage } from "@/hooks/useLocalStorage"
 
 const Index = () => {
-  const [posts, setPosts] = useState<Post[]>([])
+  const [posts, setPosts] = useLocalStorage<Post[]>('community-posts', [])
   const [filteredPosts, setFilteredPosts] = useState<Post[]>([])
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useLocalStorage<any>('community-user', null)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -20,14 +20,16 @@ const Index = () => {
   const { toast } = useToast()
 
   useEffect(() => {
-    getUser()
-    // Load mock data if no Supabase connection
-    if (!supabase) {
+    // Initialize with mock data if no posts exist
+    if (posts.length === 0) {
       setMockData()
-    } else {
-      getPosts()
     }
+    setLoading(false)
   }, [])
+
+  useEffect(() => {
+    filterPosts()
+  }, [posts, searchTerm, selectedCategory])
 
   const setMockData = () => {
     const mockPosts: Post[] = [
@@ -66,47 +68,21 @@ const Index = () => {
         user_name: 'Mike Wilson',
         user_email: 'mike@example.com',
         is_active: true
+      },
+      {
+        id: '4',
+        title: 'Offering tutoring services',
+        description: 'Math and science tutor available for high school students. 10 years experience, very reasonable rates.',
+        category: 'services',
+        location: 'Oak Avenue',
+        created_at: new Date(Date.now() - 259200000).toISOString(),
+        user_id: '4',
+        user_name: 'Dr. Emily Chen',
+        user_email: 'emily@example.com',
+        is_active: true
       }
     ]
     setPosts(mockPosts)
-    setLoading(false)
-  }
-
-  useEffect(() => {
-    filterPosts()
-  }, [posts, searchTerm, selectedCategory])
-
-  const getUser = async () => {
-    if (!supabase) {
-      setUser(null)
-      setLoading(false)
-      return
-    }
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    setUser(user)
-    setLoading(false)
-  }
-
-  const getPosts = async () => {
-    if (!supabase) return
-    
-    const { data, error } = await supabase
-      .from('posts')
-      .select('*')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Error fetching posts:', error)
-      toast({
-        title: "Error",
-        description: "Failed to load posts",
-        variant: "destructive"
-      })
-    } else {
-      setPosts(data || [])
-    }
   }
 
   const filterPosts = () => {
@@ -133,34 +109,34 @@ const Index = () => {
     category: string
     location: string
   }) => {
-    if (!supabase) {
+    if (!user) {
       toast({
-        title: "Demo Mode",
-        description: "Connect to Supabase to enable post creation",
+        title: "Please sign in",
+        description: "You need to sign in to create a post",
         variant: "destructive"
       })
       return
     }
-    
-    if (!user) return
 
-    const { error } = await supabase
-      .from('posts')
-      .insert([
-        {
-          ...postData,
-          user_id: user.id,
-          user_name: user.user_metadata?.name || user.email.split('@')[0],
-          user_email: user.email,
-          is_active: true
-        }
-      ])
-
-    if (error) {
-      throw new Error(error.message)
+    const newPost: Post = {
+      id: Date.now().toString(),
+      title: postData.title,
+      description: postData.description,
+      category: postData.category as 'help-needed' | 'offering-help' | 'events' | 'services',
+      location: postData.location,
+      created_at: new Date().toISOString(),
+      user_id: user.id,
+      user_name: user.name,
+      user_email: user.email,
+      is_active: true
     }
 
-    await getPosts()
+    setPosts([newPost, ...posts])
+    
+    toast({
+      title: "Post created!",
+      description: "Your help request has been shared with the community"
+    })
   }
 
   const handleSignUp = async (data: {
@@ -169,53 +145,42 @@ const Index = () => {
     name: string
     location: string
   }) => {
-    if (!supabase) {
-      toast({
-        title: "Demo Mode",
-        description: "Connect to Supabase to enable authentication",
-        variant: "destructive"
-      })
-      return
+    // Simple demo authentication
+    const newUser = {
+      id: Date.now().toString(),
+      email: data.email,
+      name: data.name,
+      location: data.location,
+      created_at: new Date().toISOString()
     }
     
-    const { error } = await supabase.auth.signUp({
-      email: data.email,
-      password: data.password,
-      options: {
-        data: {
-          name: data.name,
-          location: data.location
-        }
-      }
+    setUser(newUser)
+    
+    toast({
+      title: "Welcome to the community!",
+      description: "Your account has been created successfully"
     })
-
-    if (error) throw new Error(error.message)
-    await getUser()
   }
 
   const handleSignIn = async (data: { email: string; password: string }) => {
-    if (!supabase) {
-      toast({
-        title: "Demo Mode",
-        description: "Connect to Supabase to enable authentication",
-        variant: "destructive"
-      })
-      return
+    // Simple demo authentication
+    const demoUser = {
+      id: 'demo-user',
+      email: data.email,
+      name: data.email.split('@')[0],
+      location: 'Demo Location',
+      created_at: new Date().toISOString()
     }
     
-    const { error } = await supabase.auth.signInWithPassword({
-      email: data.email,
-      password: data.password
+    setUser(demoUser)
+    
+    toast({
+      title: "Welcome back!",
+      description: "You've successfully signed in"
     })
-
-    if (error) throw new Error(error.message)
-    await getUser()
   }
 
   const handleSignOut = async () => {
-    if (!supabase) return
-    
-    await supabase.auth.signOut()
     setUser(null)
     toast({
       title: "Signed out",
